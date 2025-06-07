@@ -1,0 +1,35 @@
+#!/bin/bash
+#SBATCH --chdir /home/ipci # TODO!!!!!!!!
+#SBATCH --job-name=train
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=29
+#SBATCH --gpus-per-task=1
+#SBATCH --mem=16G
+#SBATCH --time=8:00:00
+#SBATCH --output=/home/ipci/nml/job_outputs/train_run_%j.out ## TODO
+#SBATCH --error=/home/ipci/nml/job_outputs/train_run_%j.err ## TODO
+
+echo STARTING AT `date`
+
+venv="/home/ipci/mnlp/mnlp_venv/bin/activate" ## TODO !!!
+source $venv
+
+# (Optional) if you ever want submissions automatically:
+# SUBMIT_FLAG="--submit"
+SUBMIT_FLAG=""
+SAVE_FLAG=""
+
+# List out each run’s full flag string:
+configs=(
+  "--n_layers 2 --n_heads 4 --lr 1e-4  --batch_size 512 --threshold 0.25"
+  "--n_layers 3 --n_heads 8 --lr 5e-5  --batch_size 256 --threshold 0.50"
+  "--n_layers 4 --n_heads 4 --lr 1e-5  --batch_size 128 --threshold 0.25"
+  # add more here…
+)
+
+for cfg in "${configs[@]}"; do
+  echo ">>> Running: python main.py $cfg $SUBMIT_FLAG $SAVE_FLAG"
+  python main.py $cfg $SUBMIT_FLAG $SAVE_FLAG
+  echo
+done
