@@ -26,7 +26,6 @@ class PlaceHolder:
         n = node_mask.shape[1]
         x_mask = node_mask.unsqueeze(-1)  # bs, n, 1
 
-        # Your solution here ###########################################################
         e_mask1 = x_mask.unsqueeze(2)  # bs, n, 1, 1
         e_mask2 = x_mask.unsqueeze(1)  # bs, 1, n, 1
         diag_mask = (
@@ -35,7 +34,6 @@ class PlaceHolder:
             .expand(bs, -1, -1)
             .unsqueeze(-1)
         )  # bs, n, n, 1
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         self.X = self.X * x_mask
         self.E = self.E * e_mask1 * e_mask2 * diag_mask

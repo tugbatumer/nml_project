@@ -28,7 +28,6 @@ parser.add_argument("--save",      action="store_true",        help="if set, sav
 
 args = parser.parse_args()
 
-# Then replace your vars:
 n_layers   = args.n_layers
 n_heads    = args.n_heads
 lr         = args.lr
@@ -38,7 +37,6 @@ threshold  = args.threshold
 submit     = args.submit
 save       = args.save
 
-# we can also try hidden dim params
 
 seed_everything(21)
 
@@ -50,8 +48,8 @@ DATASET_ROOT = Path(f"{data_path}/")
 
 #### BUILD GRAPH ###
 
-# Load your CSV file
-df = pd.read_csv("distances_3d.csv")  # Update with your actual file path
+# Load CSV file
+df = pd.read_csv("distances_3d.csv")
 
 
 # Get sorted list of unique node names (e.g., 'FP1', 'F3', ...)
@@ -60,7 +58,7 @@ node_to_idx = {name: idx for idx, name in enumerate(nodes)}
 
 # Create empty matrix
 N = len(nodes)
-dist = np.full((N, N), np.inf)  # Initialize with inf (or large number)
+dist = np.full((N, N), np.inf)
 
 # Fill matrix
 for _, row in df.iterrows():
@@ -83,16 +81,12 @@ dataset_tr = EEGDataset(
 
 # Split with no patients being in both train and validation split
 def extract_patient(idx):
-    # if the index entry is a tuple (e.g. a MultiIndex), grab its first element
     first = idx[0] if isinstance(idx, tuple) else idx
-    # now split on '_' and take the patient prefix
     return first.split('_')[0]
 
-# apply that to the index
 clips_tr = clips_tr.copy()
 clips_tr['patient'] = clips_tr.index.map(extract_patient)
 
-# now split patients
 unique_pats = clips_tr['patient'].unique()
 shuffled = np.random.permutation(unique_pats)
 val_pats   = shuffled[:21]
@@ -117,7 +111,6 @@ val_split = EEGDataset(
     prefetch=True,  # If your compute does not allow it, you can use `prefetch=False`
 )
 
-# Now wrap both in EEGGraphDataset
 train_dataset = EEGGraphDataset(train_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
 val_dataset = EEGGraphDataset(val_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
 
@@ -127,14 +120,13 @@ val_dataset = EEGGraphDataset(val_split, edge_index=edge_index, edge_attr=edge_a
 N = train_dataset.in_dim                # 19
 
 # 2) True “features per node” = F, taken from raw EEGDataset:
-#    dataset_tr[i][0] has shape (19, F), so F = dataset_tr[0][0].shape[1].
 F = dataset_tr[0][0].shape[1]           # e.g. 372
 
 in_feat_per_node  = F                   # 372
 in_feat_per_edge  = 1
 in_feat_global    = 1                   # no real globals→feed zeros
 
-# 3) Hidden dims (you can tune)
+# 3) Hidden dims
 hidden_dims = {
     "X":  64,
     "E":  64,
@@ -158,13 +150,12 @@ model = GraphTransformer(
     output_dims=output_dims,
 ).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=lr) #was 1e-3
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 criterion = torch.nn.BCEWithLogitsLoss()
 
 
 ### TRAIN & VAL ###
 
-# DataLoaders (use PyG’s DataLoader)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False)
 
@@ -310,12 +301,12 @@ if submit:
     # Create test dataset
     clips_te = pd.read_parquet(DATASET_ROOT / "test/segments.parquet")
     dataset_te = EEGDataset(
-        clips_te,  # Your test clips variable
+        clips_te,
         signals_root=DATA_ROOT
-        / "test",  # Update this path if your test signals are stored elsewhere
-        signal_transform=preprocess_method,  # You can change or remove the signal_transform as needed
-        prefetch=True,  # Set to False if prefetching causes memory issues on your compute environment
-        return_id=True,  # Return the id of each sample instead of the label
+        / "test",
+        signal_transform=preprocess_method,
+        prefetch=True,
+        return_id=True,
     )
     test_dataset = EEGGraphDataset(dataset_te, edge_index=edge_index, edge_attr=edge_attr, is_train=False)
 

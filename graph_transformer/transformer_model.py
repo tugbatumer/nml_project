@@ -115,7 +115,7 @@ class NodeEdgeBlock(nn.Module):
         self.e_mul = Linear(de, dx)
 
         # FiLM y to E
-        self.y_e_mul = Linear(dy, dx)  # Warning: here it's dx and not de
+        self.y_e_mul = Linear(dy, dx)
         self.y_e_add = Linear(dy, dx)
 
         # FiLM y to X
@@ -145,8 +145,6 @@ class NodeEdgeBlock(nn.Module):
         e_mask1 = x_mask.unsqueeze(2)  # bs, n, 1, 1
         e_mask2 = x_mask.unsqueeze(1)  # bs, 1, n, 1
 
-
-        # Your solution here ###########################################################
         # 1. Map X to keys and queries and mask them correspondinglt
         Q = self.q(X) * x_mask  # (bs, n, dx)
         K = self.k(X) * x_mask  # (bs, n, dx)
@@ -159,10 +157,8 @@ class NodeEdgeBlock(nn.Module):
         K = K.unsqueeze(1)  # (bs, n, 1, n head, df)
 
         # 3. Compute unnormalized attentions. Y is (bs, n, n, n_head, df)
-        #    This part introduces a slight variation to the standard attention mechanism, where Y is of size (bs, n, n, n_head, df) instead of (bs, n, n, n_head)
         Y = Q * K
         Y = Y / math.sqrt(Y.size(-1))
-        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         E1 = self.e_mul(E) * e_mask1 * e_mask2  # bs, n, n, dx
         E1 = E1.reshape((E.size(0), E.size(1), E.size(2), self.n_head, self.df))
@@ -181,7 +177,6 @@ class NodeEdgeBlock(nn.Module):
 
         # Output E
         newE = self.e_out(newE) * e_mask1 * e_mask2  # bs, n, n, de
-        # diffusion_utils.assert_correctly_masked(newE, e_mask1 * e_mask2)
 
         # Compute attentions. attn is still (bs, n, n, n_head, df)
         softmax_mask = e_mask2.expand(-1, n, -1, self.n_head)  # bs, 1, n, 1
@@ -199,15 +194,12 @@ class NodeEdgeBlock(nn.Module):
         weighted_V = weighted_V.flatten(start_dim=2)  # bs, n, dx
 
         # FiLM: Incorporate y to X (weighted_V)
-        # Your solution here ###########################################################
         yx1 = self.y_x_add(y).unsqueeze(1)
         yx2 = self.y_x_mul(y).unsqueeze(1)
         newX = yx1 + (yx2 + 1) * weighted_V
-        #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         # Output X
         newX = self.x_out(newX) * x_mask
-        # diffusion_utils.assert_correctly_masked(newX, x_mask)
 
         # Process y based on X axnd E
         y = self.y_y(y)
