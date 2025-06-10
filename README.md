@@ -11,6 +11,7 @@ This repository contains implementations of various neural network models applie
 ## Repository Structure
 
 ```
+├── project_report.pdf # Project Report
 ├── CNN.ipynb # Convolutional Neural Network notebook
 ├── MPNN.ipynb # Message Passing Neural Network notebook
 ├── example.ipynb # Given example notebook containing Baseline LSTM implementation
