@@ -73,6 +73,10 @@ def fft_filtering(x: np.ndarray) -> np.ndarray:
     # Only frequencies b/w 0.5 and 30Hz
     return x[int(0.5 * win_len // 250) : 30 * win_len // 250]
 
+def fft_filtering_features(x: np.ndarray) -> np.ndarray:
+    filtered = fft_filtering(x)
+    return filtered.T
+
 def handcrafted_features(x: np.ndarray) -> np.ndarray:
 
     mean_abs_diff1 = np.mean(np.abs(x[1:] - x[:-1]), axis=0)

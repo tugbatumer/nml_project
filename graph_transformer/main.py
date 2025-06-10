@@ -11,7 +11,7 @@ import argparse
 
 import utils
 from transformer_model import GraphTransformer
-from helpers import seed_everything, build_softmax_thresholded_graph, handcrafted_features_combined, handcrafted_features, fft_filtering, batch_to_dense_E
+from helpers import seed_everything, build_softmax_thresholded_graph, handcrafted_features_combined, handcrafted_features, fft_filtering_features, batch_to_dense_E
 from placeholder import PlaceHolder
 from eeggraphdataset import EEGGraphDataset
 
@@ -53,6 +53,7 @@ DATASET_ROOT = Path(f"{data_path}/")
 # Load your CSV file
 df = pd.read_csv("distances_3d.csv")  # Update with your actual file path
 
+
 # Get sorted list of unique node names (e.g., 'FP1', 'F3', ...)
 nodes = sorted(set(df["from"]) | set(df["to"]))
 node_to_idx = {name: idx for idx, name in enumerate(nodes)}
@@ -69,7 +70,7 @@ for _, row in df.iterrows():
 
 edge_index, edge_attr = build_softmax_thresholded_graph(dist, beta=5, keep_ratio=0.9)
 
-preprocess_method = fft_filtering
+preprocess_method = fft_filtering_features
 
 ### LOAD TRAIN DATA ###
 clips_tr = pd.read_parquet(DATASET_ROOT / "train/segments.parquet")
@@ -107,13 +108,13 @@ train_split = EEGDataset(
     train_df,
     signals_root=DATA_ROOT / "train",
     signal_transform=preprocess_method,
-    prefetch=False,  # If your compute does not allow it, you can use `prefetch=False`
+    prefetch=True,  # If your compute does not allow it, you can use `prefetch=False`
 )
 val_split = EEGDataset(
     val_df,
     signals_root=DATA_ROOT / "train",
     signal_transform=preprocess_method,
-    prefetch=False,  # If your compute does not allow it, you can use `prefetch=False`
+    prefetch=True,  # If your compute does not allow it, you can use `prefetch=False`
 )
 
 # Now wrap both in EEGGraphDataset
@@ -313,7 +314,7 @@ if submit:
         signals_root=DATA_ROOT
         / "test",  # Update this path if your test signals are stored elsewhere
         signal_transform=preprocess_method,  # You can change or remove the signal_transform as needed
-        prefetch=False,  # Set to False if prefetching causes memory issues on your compute environment
+        prefetch=True,  # Set to False if prefetching causes memory issues on your compute environment
         return_id=True,  # Return the id of each sample instead of the label
     )
     test_dataset = EEGGraphDataset(dataset_te, edge_index=edge_index, edge_attr=edge_attr, is_train=False)
