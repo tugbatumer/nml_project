@@ -11,10 +11,11 @@ import argparse
 
 import utils
 from transformer_model import GraphTransformer
-from helpers import seed_everything, build_softmax_thresholded_graph, handcrafted_features, batch_to_dense_E
+from helpers import seed_everything, build_softmax_thresholded_graph, handcrafted_features_combined, handcrafted_features, fft_filtering, batch_to_dense_E
 from placeholder import PlaceHolder
 from eeggraphdataset import EEGGraphDataset
 
+# Example usage: python main.py --n_layers 3 --n_heads 8 --lr 1e-4  --batch_size 256 --threshold 0.25 --epochs 500 --save --submit
 parser = argparse.ArgumentParser(description="Train GraphTransformer on EEG data")
 parser.add_argument("--n_layers",    type=int,   default=2,       help="number of Transformer layers")
 parser.add_argument("--n_heads",     type=int,   default=4,       help="number of attention heads")
@@ -39,7 +40,7 @@ save       = args.save
 
 # we can also try hidden dim params
 
-seed_everything(1)
+seed_everything(21)
 
 data_path = "/home/ogut/data/"
 
@@ -68,26 +69,56 @@ for _, row in df.iterrows():
 
 edge_index, edge_attr = build_softmax_thresholded_graph(dist, beta=5, keep_ratio=0.9)
 
+preprocess_method = fft_filtering
 
 ### LOAD TRAIN DATA ###
 clips_tr = pd.read_parquet(DATASET_ROOT / "train/segments.parquet")
 dataset_tr = EEGDataset(
     clips_tr,
     signals_root=DATASET_ROOT / "train",
-    signal_transform=handcrafted_features,
+    signal_transform=preprocess_method,
     prefetch=True,  # If your compute does not allow it, you can use `prefetch=False`
 )
 
-total_len = len(dataset_tr)
-train_len = int(0.8 * total_len)
-val_len = total_len - train_len
+# Split with no patients being in both train and validation split
+def extract_patient(idx):
+    # if the index entry is a tuple (e.g. a MultiIndex), grab its first element
+    first = idx[0] if isinstance(idx, tuple) else idx
+    # now split on '_' and take the patient prefix
+    return first.split('_')[0]
 
-# Randomly split
-dataset_tr_split, dataset_val_split = random_split(dataset_tr, [train_len, val_len])
+# apply that to the index
+clips_tr = clips_tr.copy()
+clips_tr['patient'] = clips_tr.index.map(extract_patient)
+
+# now split patients
+unique_pats = clips_tr['patient'].unique()
+shuffled = np.random.permutation(unique_pats)
+val_pats   = shuffled[:21]
+train_pats = shuffled[21:]
+
+train_df = clips_tr[clips_tr['patient'].isin(train_pats)].copy()
+val_df   = clips_tr[clips_tr['patient'].isin(val_pats)].copy()
+
+print(f"Train patients: {train_df['patient'].nunique()}, samples: {len(train_df)}")
+print(f"  Val patients: {val_df  ['patient'].nunique()}, samples: {len(val_df)  }")
+
+train_split = EEGDataset(
+    train_df,
+    signals_root=DATA_ROOT / "train",
+    signal_transform=preprocess_method,
+    prefetch=False,  # If your compute does not allow it, you can use `prefetch=False`
+)
+val_split = EEGDataset(
+    val_df,
+    signals_root=DATA_ROOT / "train",
+    signal_transform=preprocess_method,
+    prefetch=False,  # If your compute does not allow it, you can use `prefetch=False`
+)
 
 # Now wrap both in EEGGraphDataset
-train_dataset = EEGGraphDataset(dataset_tr_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
-val_dataset = EEGGraphDataset(dataset_val_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
+train_dataset = EEGGraphDataset(train_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
+val_dataset = EEGGraphDataset(val_split, edge_index=edge_index, edge_attr=edge_attr, is_train=True)
 
 ### PREPARE MODEL ###
 
@@ -144,7 +175,7 @@ global_edge_attr  = train_dataset.edge_attr.to(device)    # shape (M,)
 train_losses, train_accs, train_f1scores = [], [], []
 val_losses,   val_accs,   val_f1scores   = [], [], []
 
-fname = f"outputs/results_layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.txt"
+fname = f"outputs/results_{preprocess_method.__name__}__layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.txt"
 open(fname, "w").close()
 
 for epoch in range(epochs):
@@ -268,7 +299,7 @@ for epoch in range(epochs):
 
 ### OPTIONAL SAVE ###
 if save:
-    save_path = f"models/graph_transformer_epochs{epochs}_layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.pth"
+    save_path = f"models/graph_transformer_{preprocess_method.__name__}__epochs{epochs}_layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.pth"
     torch.save(model.state_dict(), save_path)
     print(f"Model weights saved to {save_path}")
 
@@ -281,8 +312,8 @@ if submit:
         clips_te,  # Your test clips variable
         signals_root=DATA_ROOT
         / "test",  # Update this path if your test signals are stored elsewhere
-        signal_transform=handcrafted_features,  # You can change or remove the signal_transform as needed
-        prefetch=True,  # Set to False if prefetching causes memory issues on your compute environment
+        signal_transform=preprocess_method,  # You can change or remove the signal_transform as needed
+        prefetch=False,  # Set to False if prefetching causes memory issues on your compute environment
         return_id=True,  # Return the id of each sample instead of the label
     )
     test_dataset = EEGGraphDataset(dataset_te, edge_index=edge_index, edge_attr=edge_attr, is_train=False)
@@ -337,7 +368,7 @@ if submit:
             all_ids.extend(ids)
 
             submission_df = pd.DataFrame({"id": all_ids, "label": all_preds})
-            submission_df.to_csv(f"predictions/submission_epochs{epochs}_layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.csv", index=False)
+            submission_df.to_csv(f"predictions/submission_{preprocess_method.__name__}__epochs{epochs}_layers{n_layers}_heads{n_heads}_lr{lr:.0e}_bs{batch_size}.csv", index=False)
 
 
 
